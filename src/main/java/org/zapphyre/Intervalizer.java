@@ -1,6 +1,7 @@
 package org.zapphyre;
 
 import lombok.experimental.UtilityClass;
+import org.zapphyre.config.ESeriesStart;
 import org.zapphyre.config.InteriBuilder;
 import org.zapphyre.model.IntervalGroup;
 import org.zapphyre.model.OccurringElement;
@@ -35,7 +36,10 @@ public class Intervalizer {
             // Sort elements and collect to list for memoization
             List<T> sortedElements = elements.stream()
                     .filter(e -> e.getOccurredOn() != null)
-                    .sorted(Comparator.comparing(OccurringElement::getOccurredOn))
+                    .sorted(settings.getFirst() == ESeriesStart.LATEST ?
+                            Comparator.comparing(OccurringElement::getOccurredOn) :
+                            Comparator.comparing(OccurringElement::getOccurredOn).reversed()
+                    )
                     .toList();
 
             // Memoized function to compute group start time
