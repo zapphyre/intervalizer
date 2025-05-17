@@ -8,5 +8,5 @@ import java.util.List;
 @FunctionalInterface
 public interface InteriBuilder<T extends OccurringElement> {
 
-    List<IntervalGroup<T>> groupElements(IntervaliProps props);
+    List<IntervalGroup<T>> described(IntervaliProps props);
 }

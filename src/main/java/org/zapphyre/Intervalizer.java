@@ -1,7 +1,7 @@
 package org.zapphyre;
 
 import lombok.experimental.UtilityClass;
-import org.zapphyre.config.InteriSettings;
+import org.zapphyre.config.InteriBuilder;
 import org.zapphyre.model.IntervalGroup;
 import org.zapphyre.model.OccurringElement;
 
@@ -30,8 +30,8 @@ public class Intervalizer {
         }
     }
 
-    public <T extends OccurringElement> InteriSettings<T> interiBuilder() {
-        return elements -> settings -> {
+    public <T extends OccurringElement> InteriBuilder<T> intervalize(List<T> elements) {
+        return settings -> {
             // Sort elements and collect to list for memoization
             List<T> sortedElements = elements.stream()
                     .filter(e -> e.getOccurredOn() != null)
