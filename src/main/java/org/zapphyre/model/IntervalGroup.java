@@ -17,5 +17,7 @@ public class IntervalGroup<T extends OccurringElement> {
 
     @Singular
     List<T> occurringElements;
+
+    @Singular
     List<T> discardedElements;
 }

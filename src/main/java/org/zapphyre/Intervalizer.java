@@ -10,6 +10,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Gatherer;
 
@@ -46,6 +47,8 @@ public class Intervalizer {
                             .orElse(time)
             );
 
+            AtomicInteger groupCount = new AtomicInteger();
+
             // Custom Gatherer to assign elements to groups
             Gatherer<T, Map<LocalDateTime, IntervalGroup.IntervalGroupBuilder<T>>, IntervalGroup<T>> groupGatherer =
                     Gatherer.ofSequential(
@@ -57,8 +60,13 @@ public class Intervalizer {
                                 // Update or create group
                                 IntervalGroup.IntervalGroupBuilder<T> updatedGroup = state.compute(groupStart, (k, g) ->
                                         (g == null ? IntervalGroup.<T>builder()
-                                                .start(groupStart) : g)
-                                                .occurringElement(element));
+                                                .start(groupStart) : g));
+
+                                // Add to either based on element count
+                                if (groupCount.getAndIncrement() > settings.getMaxElements())
+                                    updatedGroup.discardedElement(element);
+                                else
+                                    updatedGroup.occurringElement(element);
 
                                 // Emit the group if it's complete (next element belongs to a new group)
                                 boolean isLastInGroup = sortedElements.stream()
@@ -67,10 +75,15 @@ public class Intervalizer {
                                         .map(next -> !getGroupStart.get(next.getOccurredOn()).equals(groupStart))
                                         .orElse(true);
 
-                                if (isLastInGroup)
-                                    return downstream.push(state.remove(groupStart).build());
+                                if (isLastInGroup) {
+                                    downstream.push(updatedGroup
+                                            .end(element.getOccurredOn())
+                                            .build());
 
-                                return false;
+                                    groupCount.set(0);
+                                }
+
+                                return true;
                             }),
                             (state, downstream) -> {
                                 // Emit any remaining groups
