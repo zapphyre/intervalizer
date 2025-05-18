@@ -3,29 +3,28 @@ package org.zapphyre;
 import lombok.experimental.UtilityClass;
 import org.zapphyre.config.ESeriesStart;
 import org.zapphyre.config.InteriBuilder;
+import org.zapphyre.fun.IntervalComputer;
+import org.zapphyre.fun.TimeComputer;
 import org.zapphyre.model.IntervalGroup;
 import org.zapphyre.model.OccurringElement;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
 import java.util.stream.Gatherer;
 
 @UtilityClass
 public class Intervalizer {
 
-    public static void main(String[] args) {
-        System.out.println(LocalDateTime.now());
-    }
-
-    Function<Duration, Function<LocalDateTime, Function<LocalDateTime, LocalDateTime>>> nextBeginningIntervalizedComputer =
-            interval -> baseTime -> time -> {
-                Duration offset = Duration.between(baseTime, time);
-                long steps = offset.toMinutes() / interval.toMinutes();
-                return baseTime.plus(interval.multipliedBy(steps));
-            };
+    IntervalComputer nextBeginningComputer = interval -> baseTime -> time -> {
+        Duration offset = Duration.between(baseTime, time);
+        long steps = offset.toMinutes() / interval.toMinutes();
+        return baseTime.plus(interval.multipliedBy(steps));
+    };
 
     public static <T extends OccurringElement> InteriBuilder<T> intervalize(List<T> elements) {
         return settings -> {
@@ -44,8 +43,8 @@ public class Intervalizer {
             AtomicInteger groupCount = new AtomicInteger();
 
             // Function to determine groupStart based on baseTime and interval
-            Function<LocalDateTime, LocalDateTime> fromNowNextBeginning =
-                    nextBeginningIntervalizedComputer.apply(interval).apply(baseTime);
+            TimeComputer fromNowNextBeginning =
+                    nextBeginningComputer.computeInterval(interval).computeBaseTime(baseTime);
 
             Gatherer<T, Map<LocalDateTime, IntervalGroup.IntervalGroupBuilder<T>>, IntervalGroup<T>> groupGatherer =
                     Gatherer.ofSequential(
@@ -53,7 +52,7 @@ public class Intervalizer {
                             Gatherer.Integrator.ofGreedy((state, element, downstream) -> {
                                 int index = currentIndex.getAndIncrement();
                                 LocalDateTime time = element.getOccurredOn();
-                                LocalDateTime groupStart = fromNowNextBeginning.apply(time);
+                                LocalDateTime groupStart = fromNowNextBeginning.computeTime(time);
 
                                 IntervalGroup.IntervalGroupBuilder<T> updatedGroup = state.compute(groupStart, (k, g) ->
                                         g == null ? IntervalGroup.<T>builder().start(groupStart) : g);
@@ -68,7 +67,7 @@ public class Intervalizer {
                                     emit = true;
                                 } else {
                                     T next = sortedElements.get(index + 1);
-                                    LocalDateTime nextGroupStart = fromNowNextBeginning.apply(next.getOccurredOn());
+                                    LocalDateTime nextGroupStart = fromNowNextBeginning.computeTime(next.getOccurredOn());
                                     if (!nextGroupStart.equals(groupStart)) {
                                         emit = true;
                                     }

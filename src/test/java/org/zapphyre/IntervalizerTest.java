@@ -13,7 +13,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.zapphyre.EventGenerator.generateEventsWithFixedInterval;
 import static org.zapphyre.Intervalizer.intervalize;
-import static org.zapphyre.Intervalizer.nextBeginningIntervalizedComputer;
+import static org.zapphyre.Intervalizer.nextBeginningComputer;
 
 public class IntervalizerTest {
 
@@ -43,8 +43,8 @@ public class IntervalizerTest {
         final LocalDateTime TIME = LocalDateTime.of(2024, 1, 1, 0, 1);
 
         // When
-        var baseTimeFn = nextBeginningIntervalizedComputer.apply(INTERVAL_15);
-        LocalDateTime result = baseTimeFn.apply(BASE_TIME).apply(TIME);
+        var baseTimeFn = nextBeginningComputer.computeInterval(INTERVAL_15);
+        LocalDateTime result = baseTimeFn.computeBaseTime(BASE_TIME).computeTime(TIME);
 
         // Then
         assertEquals(BASE_TIME, result);
@@ -58,8 +58,8 @@ public class IntervalizerTest {
         final LocalDateTime TIME = LocalDateTime.of(2024, 1, 1, 1, 25);
 
         // When
-        var baseTimeFn = nextBeginningIntervalizedComputer.apply(INTERVAL_30);
-        LocalDateTime result = baseTimeFn.apply(BASE_TIME).apply(TIME);
+        var baseTimeFn = nextBeginningComputer.computeInterval(INTERVAL_30);
+        LocalDateTime result = baseTimeFn.computeBaseTime(BASE_TIME).computeTime(TIME);
 
         // Then
         assertEquals(BASE_TIME, result);
@@ -75,8 +75,8 @@ public class IntervalizerTest {
         final LocalDateTime TIME = LocalDateTime.of(2024, 1, 1, 1, 5);
 
         // When
-        var timeFn = nextBeginningIntervalizedComputer.apply(INTERVAL_20).apply(BASE_TIME);
-        LocalDateTime result = timeFn.apply(TIME);
+        var timeFn = nextBeginningComputer.computeInterval(INTERVAL_20).computeBaseTime(BASE_TIME);
+        LocalDateTime result = timeFn.computeTime(TIME);
 
         // Then
         assertEquals(BASE_TIME, result);
@@ -90,8 +90,8 @@ public class IntervalizerTest {
         final LocalDateTime TIME = LocalDateTime.of(2024, 1, 1, 0, 25);
 
         // When
-        var timeFn = nextBeginningIntervalizedComputer.apply(INTERVAL_10).apply(BASE_TIME);
-        LocalDateTime result = timeFn.apply(TIME);
+        var timeFn = nextBeginningComputer.computeInterval(INTERVAL_10).computeBaseTime(BASE_TIME);
+        LocalDateTime result = timeFn.computeTime(TIME);
 
         // Then
         // Expected baseTime, because offset is negative and integer division truncates to zero
@@ -108,10 +108,10 @@ public class IntervalizerTest {
         final LocalDateTime TIME = LocalDateTime.of(2024, 1, 1, 3, 0);
 
         // When
-        LocalDateTime groupStart = nextBeginningIntervalizedComputer
-                .apply(INTERVAL_60)
-                .apply(BASE_TIME)
-                .apply(TIME);
+        LocalDateTime groupStart = nextBeginningComputer
+                .computeInterval(INTERVAL_60)
+                .computeBaseTime(BASE_TIME)
+                .computeTime(TIME);
 
         // Then
         assertEquals(TIME, groupStart);
@@ -125,10 +125,10 @@ public class IntervalizerTest {
         final LocalDateTime TIME = LocalDateTime.of(2024, 1, 1, 3, 59);
 
         // When
-        LocalDateTime groupStart = nextBeginningIntervalizedComputer
-                .apply(INTERVAL_60)
-                .apply(BASE_TIME)
-                .apply(TIME);
+        LocalDateTime groupStart = nextBeginningComputer
+                .computeInterval(INTERVAL_60)
+                .computeBaseTime(BASE_TIME)
+                .computeTime(TIME);
 
         // Then
         assertEquals(LocalDateTime.of(2024, 1, 1, 3, 0), groupStart);
