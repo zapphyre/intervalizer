@@ -1,6 +1,7 @@
 package org.zapphyre;
 
 import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
 import org.zapphyre.config.ESeriesStart;
 import org.zapphyre.config.InteriBuilder;
 import org.zapphyre.fun.IntervalComputer;
@@ -14,6 +15,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Gatherer;
 
+@Slf4j
 @UtilityClass
 public class Intervalizer {
 
@@ -23,8 +25,10 @@ public class Intervalizer {
         return baseTime.plus(interval.multipliedBy(steps));
     };
 
-    public static <T extends OccurringElement> InteriBuilder<T> intervalize(List<T> elements) {
+    public <T extends OccurringElement> InteriBuilder<T> intervalize(List<T> elements) {
         return settings -> {
+            log.debug("intervalizing #{} elements by interval {}; #{} per group",
+                    elements.size(), settings.getInterval(), settings.getMaxElements());
             List<T> sortedElements = elements.stream()
                     .filter(e -> Objects.nonNull(e.getOccurredOn()))
                     .sorted(settings.getFirst() == ESeriesStart.OLDEST

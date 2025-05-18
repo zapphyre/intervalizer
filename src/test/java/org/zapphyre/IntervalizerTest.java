@@ -19,7 +19,6 @@ public class IntervalizerTest {
 
     @Test
     void testGrouping() {
-//        List<Event> events = EventGenerator.generateEvents(222);
         List<Event> events = generateEventsWithFixedInterval(222, LocalDateTime.now());
 
         IntervaliProps props = IntervaliProps.builder()
@@ -30,6 +29,8 @@ public class IntervalizerTest {
 
         List<IntervalGroup<Event>> described = intervalize(events)
                 .described(props);
+
+        assertEquals(45, described.size());
     }
 
 
