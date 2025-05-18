@@ -6,11 +6,9 @@ import org.zapphyre.config.InteriBuilder;
 import org.zapphyre.model.IntervalGroup;
 import org.zapphyre.model.OccurringElement;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Gatherer;
@@ -18,89 +16,82 @@ import java.util.stream.Gatherer;
 @UtilityClass
 public class Intervalizer {
 
-    class Memoizer<K, V> {
-        private final Map<K, V> cache = new HashMap<>();
-        private final Function<K, V> computer;
-
-        Memoizer(Function<K, V> computer) {
-            this.computer = computer;
-        }
-
-        V get(K key) {
-            return cache.computeIfAbsent(key, computer);
-        }
+    public static void main(String[] args) {
+        System.out.println(LocalDateTime.now());
     }
 
-    public <T extends OccurringElement> InteriBuilder<T> intervalize(List<T> elements) {
+    Function<Duration, Function<LocalDateTime, Function<LocalDateTime, LocalDateTime>>> nextBeginningIntervalizedComputer =
+            interval -> baseTime -> time -> {
+                Duration offset = Duration.between(baseTime, time);
+                long steps = offset.toMinutes() / interval.toMinutes();
+                return baseTime.plus(interval.multipliedBy(steps));
+            };
+
+    public static <T extends OccurringElement> InteriBuilder<T> intervalize(List<T> elements) {
         return settings -> {
-            // Sort elements and collect to list for memoization
             List<T> sortedElements = elements.stream()
                     .filter(e -> e.getOccurredOn() != null)
-                    .sorted(settings.getFirst() == ESeriesStart.LATEST ?
-                            Comparator.comparing(OccurringElement::getOccurredOn) :
-                            Comparator.comparing(OccurringElement::getOccurredOn).reversed()
-                    )
+                    .sorted(settings.getFirst() == ESeriesStart.OLDEST
+                            ? Comparator.comparing(OccurringElement::getOccurredOn)
+                            : Comparator.comparing(OccurringElement::getOccurredOn).reversed())
                     .toList();
 
-            // Memoized function to compute group start time
-            Memoizer<LocalDateTime, LocalDateTime> getGroupStart = new Memoizer<>(time ->
-                    sortedElements.stream()
-                            .map(OccurringElement::getOccurredOn)
-                            .filter(t -> !time.isBefore(t) && time.isBefore(t.plus(settings.getInterval())))
-                            .findFirst()
-                            .orElse(time)
-            );
+            if (sortedElements.isEmpty()) return List.of();
 
+            LocalDateTime baseTime = sortedElements.getFirst().getOccurredOn();
+            Duration interval = settings.getInterval();
+            AtomicInteger currentIndex = new AtomicInteger();
             AtomicInteger groupCount = new AtomicInteger();
 
-            // Custom Gatherer to assign elements to groups
+            // Function to determine groupStart based on baseTime and interval
+            Function<LocalDateTime, LocalDateTime> fromNowNextBeginning =
+                    nextBeginningIntervalizedComputer.apply(interval).apply(baseTime);
+
             Gatherer<T, Map<LocalDateTime, IntervalGroup.IntervalGroupBuilder<T>>, IntervalGroup<T>> groupGatherer =
                     Gatherer.ofSequential(
-                            HashMap::new, // Initializer: map of start time to Group
+                            HashMap::new,
                             Gatherer.Integrator.ofGreedy((state, element, downstream) -> {
+                                int index = currentIndex.getAndIncrement();
                                 LocalDateTime time = element.getOccurredOn();
-                                LocalDateTime groupStart = getGroupStart.get(time);
+                                LocalDateTime groupStart = fromNowNextBeginning.apply(time);
 
-                                // Update or create group
                                 IntervalGroup.IntervalGroupBuilder<T> updatedGroup = state.compute(groupStart, (k, g) ->
-                                        (g == null ? IntervalGroup.<T>builder()
-                                                .start(groupStart) : g));
+                                        g == null ? IntervalGroup.<T>builder().start(groupStart) : g);
 
-                                // Add to either based on element count
-                                if (groupCount.getAndIncrement() > settings.getMaxElements())
+                                if (groupCount.getAndIncrement() >= settings.getMaxElements())
                                     updatedGroup.discardedElement(element);
                                 else
                                     updatedGroup.occurringElement(element);
 
-                                // Emit the group if it's complete (next element belongs to a new group)
-                                boolean isLastInGroup = sortedElements.stream()
-                                        .filter(e -> e.getOccurredOn().isAfter(time))
-                                        .findFirst()
-                                        .map(next -> !getGroupStart.get(next.getOccurredOn()).equals(groupStart))
-                                        .orElse(true);
+                                boolean emit = false;
+                                if (index + 1 >= sortedElements.size()) {
+                                    emit = true;
+                                } else {
+                                    T next = sortedElements.get(index + 1);
+                                    LocalDateTime nextGroupStart = fromNowNextBeginning.apply(next.getOccurredOn());
+                                    if (!nextGroupStart.equals(groupStart)) {
+                                        emit = true;
+                                    }
+                                }
 
-                                if (isLastInGroup) {
-                                    downstream.push(updatedGroup
-                                            .end(element.getOccurredOn())
-                                            .build());
-
+                                if (emit) {
+                                    downstream.push(updatedGroup.end(element.getOccurredOn()).build());
                                     groupCount.set(0);
+                                    state.remove(groupStart);
                                 }
 
                                 return true;
                             }),
-                            (state, downstream) -> {
-                                // Emit any remaining groups
-                                state.values().stream()
-                                        .map(IntervalGroup.IntervalGroupBuilder::build)
-                                        .forEach(downstream::push);
-                            } // Finisher
+                            (state, downstream) -> state.values().stream()
+                                    .map(IntervalGroup.IntervalGroupBuilder::build)
+                                    .forEach(downstream::push)
                     );
 
-            // Stream pipeline
             return sortedElements.stream()
                     .gather(groupGatherer)
                     .toList();
         };
     }
+
+
 }
