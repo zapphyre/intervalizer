@@ -10,10 +10,7 @@ import org.zapphyre.model.OccurringElement;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Gatherer;
 
@@ -29,7 +26,7 @@ public class Intervalizer {
     public static <T extends OccurringElement> InteriBuilder<T> intervalize(List<T> elements) {
         return settings -> {
             List<T> sortedElements = elements.stream()
-                    .filter(e -> e.getOccurredOn() != null)
+                    .filter(e -> Objects.nonNull(e.getOccurredOn()))
                     .sorted(settings.getFirst() == ESeriesStart.OLDEST
                             ? Comparator.comparing(OccurringElement::getOccurredOn)
                             : Comparator.comparing(OccurringElement::getOccurredOn).reversed())
@@ -38,9 +35,9 @@ public class Intervalizer {
             if (sortedElements.isEmpty()) return List.of();
 
             LocalDateTime baseTime = sortedElements.getFirst().getOccurredOn();
-            Duration interval = settings.getInterval();
             AtomicInteger currentIndex = new AtomicInteger();
             AtomicInteger groupCount = new AtomicInteger();
+            Duration interval = settings.getInterval();
 
             // Function to determine groupStart based on baseTime and interval
             TimeComputer fromNowNextBeginning =
