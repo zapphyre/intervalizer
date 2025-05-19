@@ -33,7 +33,6 @@ public class IntervalizerTest {
         assertEquals(45, described.size());
     }
 
-
     // === Level 1: Interval-only ===
 
     @Test
