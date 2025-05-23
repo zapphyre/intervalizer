@@ -13,7 +13,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Gatherer;
+import java.util.stream.Collectors;
 
 @Slf4j
 @UtilityClass
@@ -29,69 +29,49 @@ public class Intervalizer {
         return settings -> {
             log.debug("intervalizing #{} elements by interval {}; #{} per group",
                     elements.size(), settings.getInterval(), settings.getMaxElements());
+
             List<T> sortedElements = elements.stream()
-                    .filter(e -> Objects.nonNull(e.getOccurredOn()))
+                    .filter(e -> e.getOccurredOn() != null)
                     .sorted(settings.getFirst() == ESeriesStart.OLDEST
                             ? Comparator.comparing(OccurringElement::getOccurredOn)
                             : Comparator.comparing(OccurringElement::getOccurredOn).reversed())
-                    .toList();
+                    .collect(Collectors.toList());
 
-            if (sortedElements.isEmpty()) return List.of();
+            if (sortedElements.isEmpty()) return Collections.emptyList();
 
-            LocalDateTime baseTime = sortedElements.getFirst().getOccurredOn();
-            AtomicInteger currentIndex = new AtomicInteger();
-            AtomicInteger groupCount = new AtomicInteger();
+            LocalDateTime baseTime = sortedElements.get(0).getOccurredOn();
             Duration interval = settings.getInterval();
+            TimeComputer timeComputer = nextBeginningComputer.computeInterval(interval).computeBaseTime(baseTime);
 
-            // Function to determine groupStart based on baseTime and interval
-            TimeComputer fromNowNextBeginning =
-                    nextBeginningComputer.computeInterval(interval).computeBaseTime(baseTime);
+            Map<LocalDateTime, IntervalGroup.IntervalGroupBuilder<T>> groupMap = new LinkedHashMap<>();
+            List<IntervalGroup<T>> finalizedGroups = new ArrayList<>();
+            AtomicInteger groupCount = new AtomicInteger(0);
 
-            Gatherer<T, Map<LocalDateTime, IntervalGroup.IntervalGroupBuilder<T>>, IntervalGroup<T>> groupGatherer =
-                    Gatherer.ofSequential(
-                            HashMap::new,
-                            Gatherer.Integrator.ofGreedy((state, element, downstream) -> {
-                                int index = currentIndex.getAndIncrement();
-                                LocalDateTime time = element.getOccurredOn();
-                                LocalDateTime groupStart = fromNowNextBeginning.computeTime(time);
+            for (int i = 0; i < sortedElements.size(); i++) {
+                T element = sortedElements.get(i);
+                LocalDateTime time = element.getOccurredOn();
+                LocalDateTime groupStart = timeComputer.computeTime(time);
 
-                                IntervalGroup.IntervalGroupBuilder<T> updatedGroup = state.compute(groupStart, (k, g) ->
-                                        g == null ? IntervalGroup.<T>builder().start(groupStart) : g);
+                IntervalGroup.IntervalGroupBuilder<T> group = groupMap.computeIfAbsent(groupStart,
+                        k -> IntervalGroup.<T>builder().start(groupStart));
 
-                                if (groupCount.getAndIncrement() >= settings.getMaxElements())
-                                    updatedGroup.discardedElement(element);
-                                else
-                                    updatedGroup.occurringElement(element);
+                if (groupCount.incrementAndGet() > settings.getMaxElements()) {
+                    group.discardedElement(element);
+                } else {
+                    group.occurringElement(element);
+                }
 
-                                boolean emit = false;
-                                if (index + 1 >= sortedElements.size()) {
-                                    emit = true;
-                                } else {
-                                    T next = sortedElements.get(index + 1);
-                                    LocalDateTime nextGroupStart = fromNowNextBeginning.computeTime(next.getOccurredOn());
-                                    if (!nextGroupStart.equals(groupStart)) {
-                                        emit = true;
-                                    }
-                                }
+                boolean isLast = i == sortedElements.size() - 1;
+                boolean nextGroupDiffers = !isLast && !timeComputer.computeTime(sortedElements.get(i + 1).getOccurredOn()).equals(groupStart);
 
-                                if (emit) {
-                                    downstream.push(updatedGroup.end(element.getOccurredOn()).build());
-                                    groupCount.set(0);
-                                    state.remove(groupStart);
-                                }
+                if (isLast || nextGroupDiffers) {
+                    finalizedGroups.add(group.end(time).build());
+                    groupMap.remove(groupStart);
+                    groupCount.set(0);
+                }
+            }
 
-                                return true;
-                            }),
-                            (state, downstream) -> state.values().stream()
-                                    .map(IntervalGroup.IntervalGroupBuilder::build)
-                                    .forEach(downstream::push)
-                    );
-
-            return sortedElements.stream()
-                    .gather(groupGatherer)
-                    .toList();
+            return finalizedGroups;
         };
     }
-
-
 }
